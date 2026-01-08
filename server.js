@@ -37,6 +37,13 @@ const cowSchema = new mongoose.Schema({
 
 const Cow = mongoose.model('Cow', cowSchema);
 
+// Critical cow tracking - persists for 1 hour minimum
+let currentCriticalCow = {
+  cowId: null,
+  startTime: null,
+  duration: 60 * 60 * 1000 // 1 hour in milliseconds
+};
+
 app.use(cors());
 app.use(express.static('.')); // Serve static files from current directory
 
@@ -45,12 +52,44 @@ app.get('/api/cows', async (req, res) => {
   console.log('API /api/cows called');
   try {
     const cows = await Cow.find({});
+
+    // Check if we have an active critical cow that hasn't expired
+    const now = Date.now();
+    let criticalCowId = null;
+
+    if (currentCriticalCow.cowId && (now - currentCriticalCow.startTime) < currentCriticalCow.duration) {
+      // Keep the current critical cow active
+      criticalCowId = currentCriticalCow.cowId;
+      console.log(`Keeping cow ${criticalCowId} critical (active for ${(now - currentCriticalCow.startTime) / 1000}s)`);
+    } else {
+      // Find cows that meet critical condition (temperature >= 40 OR heart_rate >= 100)
+      const criticalCandidates = cows.filter(cow => cow.temperature_c >= 40 || cow.heart_rate_bpm >= 100);
+
+      if (criticalCandidates.length > 0) {
+        // Randomly select one cow to be critical
+        const randomIndex = Math.floor(Math.random() * criticalCandidates.length);
+        criticalCowId = criticalCandidates[randomIndex]._id.toString();
+
+        // Update the critical cow tracking
+        currentCriticalCow.cowId = criticalCowId;
+        currentCriticalCow.startTime = now;
+
+        console.log(`New critical cow selected: ${criticalCowId} (will remain critical for 1 hour)`);
+      } else if (currentCriticalCow.cowId) {
+        // No candidates but we had a critical cow - clear it
+        console.log(`Clearing critical cow ${currentCriticalCow.cowId} - no candidates found`);
+        currentCriticalCow.cowId = null;
+        currentCriticalCow.startTime = null;
+      }
+    }
+
     // Add alert logic to each cow
     const cowsWithAlerts = cows.map(cow => {
-      const alerts = determineAlerts(cow);
+      const alerts = determineAlerts(cow, criticalCowId);
       return {
         ...cow.toObject(),
-        alerts: alerts
+        alerts: alerts,
+        is_critical: cow._id.toString() === criticalCowId
       };
     });
     res.json(cowsWithAlerts);
@@ -61,7 +100,7 @@ app.get('/api/cows', async (req, res) => {
 });
 
 // Function to determine alerts based on conditions
-function determineAlerts(cow) {
+function determineAlerts(cow, criticalCowId = null) {
   const alerts = [];
 
   // Pregnancy Confirmed: days_since_ai >= 45 AND estrus_detected = false
@@ -73,11 +112,11 @@ function determineAlerts(cow) {
     });
   }
 
-  // Illness Detected: temperature_c >= 40 OR heart_rate_bpm >= 100
-  if (cow.temperature_c >= 40 || cow.heart_rate_bpm >= 100) {
+  // Illness Detected: Only for the randomly selected critical cow
+  if (cow._id.toString() === criticalCowId) {
     alerts.push({
-      type: 'illness_detected',
-      message: 'Illness Detected',
+      type: 'critical_illness',
+      message: 'CRITICAL CONDITION - Urgent Treatment Required!',
       severity: 'danger'
     });
   }
@@ -117,62 +156,28 @@ async function simulateCowDataUpdates() {
   try {
     const cows = await Cow.find({});
 
-    for (const cow of cows) {
-      // Simulate slight changes in vital signs
-      const temperatureChange = (Math.random() - 0.5) * 2; // -1 to +1 degree
-      const heartRateChange = Math.floor((Math.random() - 0.5) * 10); // -5 to +5 bpm
-      const respirationChange = Math.floor((Math.random() - 0.5) * 4); // -2 to +2 bpm
+    // Select 7 random cows to keep completely normal (no changes)
+    const normalCowIndices = new Set();
+    while (normalCowIndices.size < Math.min(7, cows.length)) {
+      normalCowIndices.add(Math.floor(Math.random() * cows.length));
+    }
 
-      // Update temperature (keep within realistic ranges)
+    for (let i = 0; i < cows.length; i++) {
+      const cow = cows[i];
+
+      // Skip updating the 7 normal cows completely
+      if (normalCowIndices.has(i)) {
+        continue;
+      }
+
+      // For non-normal cows, only change temperature
+      const temperatureChange = (Math.random() - 0.5) * 2; // -1 to +1 degree
       let newTemperature = cow.temperature_c + temperatureChange;
       newTemperature = Math.max(36.5, Math.min(42.0, newTemperature));
 
-      // Update heart rate (keep within realistic ranges)
-      let newHeartRate = cow.heart_rate_bpm + heartRateChange;
-      newHeartRate = Math.max(40, Math.min(120, newHeartRate));
-
-      // Update respiration rate
-      let newRespiration = cow.respiration_bpm + respirationChange;
-      newRespiration = Math.max(15, Math.min(40, newRespiration));
-
-      // Simulate estrus detection changes (randomly)
-      const estrusChange = Math.random() < 0.05; // 5% chance to change
-      let newEstrusDetected = cow.estrus_detected;
-      if (estrusChange) {
-        newEstrusDetected = !cow.estrus_detected;
-      }
-
-      // Update days_since_ai (increment slowly)
-      let newDaysSinceAI = cow.days_since_ai;
-      if (Math.random() < 0.1) { // 10% chance to increment
-        newDaysSinceAI += 1;
-      }
-
-      // Update postpartum_days if applicable
-      let newPostpartumDays = cow.postpartum_days;
-      if (cow.pregnancy_status === 'delivered' && Math.random() < 0.1) {
-        newPostpartumDays += 1;
-      }
-
-      // Update milk yield (slight variations)
-      const milkYieldChange = (Math.random() - 0.5) * 2;
-      let newMilkYield = cow.milk_yield_liters + milkYieldChange;
-      newMilkYield = Math.max(0, Math.min(50, newMilkYield));
-
-      // Update activity level randomly
-      const activityLevels = ['Low', 'Medium', 'High'];
-      const newActivityLevel = activityLevels[Math.floor(Math.random() * activityLevels.length)];
-
-      // Update the cow document
+      // Update only temperature for these cows
       await Cow.findByIdAndUpdate(cow._id, {
         temperature_c: parseFloat(newTemperature.toFixed(1)),
-        heart_rate_bpm: newHeartRate,
-        respiration_bpm: newRespiration,
-        estrus_detected: newEstrusDetected,
-        days_since_ai: newDaysSinceAI,
-        postpartum_days: newPostpartumDays,
-        milk_yield_liters: parseFloat(newMilkYield.toFixed(1)),
-        activity_level: newActivityLevel,
         last_updated: new Date()
       });
     }
@@ -183,8 +188,8 @@ async function simulateCowDataUpdates() {
   }
 }
 
-// Start simulation - update every 30 seconds
-setInterval(simulateCowDataUpdates, 30000);
+// Start simulation - update every 5 seconds
+setInterval(simulateCowDataUpdates, 500);
 
 // Initial simulation run
 simulateCowDataUpdates();

@@ -1,3 +1,6 @@
+// Store previous critical cow IDs to detect new critical conditions
+let previousCriticalCows = new Set();
+
 async function loadCows() {
     try {
         const response = await fetch('http://localhost:3000/api/cows');
@@ -10,6 +13,27 @@ async function loadCows() {
             container.innerHTML = '<div class="error">No cow data found in the database.</div>';
             return;
         }
+
+        // Check for newly critical cows and show alerts
+        const currentCriticalCows = new Set();
+        cows.forEach(cow => {
+            if (cow.is_critical) {
+                currentCriticalCows.add(cow.cow_id);
+            }
+        });
+
+        // Find cows that became critical this update
+        const newlyCriticalCows = cows.filter(cow =>
+            cow.is_critical && !previousCriticalCows.has(cow.cow_id)
+        );
+
+        // Show alert for newly critical cows
+        newlyCriticalCows.forEach(cow => {
+            showCriticalAlert(cow);
+        });
+
+        // Update previous critical cows
+        previousCriticalCows = currentCriticalCows;
 
         const grid = document.createElement('div');
         grid.className = 'cows-grid';
@@ -31,8 +55,8 @@ function startAutoRefresh() {
     // Load data immediately
     loadCows();
 
-    // Set up periodic refresh every 30 seconds (matching simulation interval)
-    setInterval(loadCows, 30000);
+    // Set up periodic refresh every 5 seconds (matching simulation interval)
+    setInterval(loadCows, 500);
 }
 
 // Initialize when page loads
@@ -199,6 +223,70 @@ function showCowModal(cow) {
             document.body.removeChild(modalOverlay);
         }
     });
+}
+
+// Function to show critical alert popup
+function showCriticalAlert(cow) {
+    // Remove any existing critical alerts
+    const existingAlerts = document.querySelectorAll('.critical-alert-overlay');
+    existingAlerts.forEach(alert => document.body.removeChild(alert));
+
+    // Create critical alert overlay
+    const alertOverlay = document.createElement('div');
+    alertOverlay.className = 'critical-alert-overlay';
+
+    alertOverlay.innerHTML = `
+        <div class="critical-alert-content">
+            <div class="critical-alert-header">
+                <div class="alert-icon">🚨</div>
+                <h2>CRITICAL CONDITION ALERT</h2>
+            </div>
+            <div class="critical-alert-body">
+                <p><strong>Cow ${cow.cow_id}</strong> is in critical condition and requires immediate attention!</p>
+                <div class="critical-details">
+                    <div class="detail-row">
+                        <span class="detail-label">Temperature:</span>
+                        <span class="detail-value critical-temp">${cow.temperature_c}°C</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Heart Rate:</span>
+                        <span class="detail-value">${cow.heart_rate_bpm} BPM</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Current Status:</span>
+                        <span class="detail-value critical-status">CRITICAL</span>
+                    </div>
+                </div>
+                <p class="urgent-message">⚠️ URGENT: Immediate veterinary treatment required!</p>
+            </div>
+            <div class="critical-alert-actions">
+                <button class="acknowledge-btn">Acknowledge & View Details</button>
+                <button class="dismiss-btn">Dismiss</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(alertOverlay);
+
+    // Add event listeners
+    const acknowledgeBtn = alertOverlay.querySelector('.acknowledge-btn');
+    const dismissBtn = alertOverlay.querySelector('.dismiss-btn');
+
+    acknowledgeBtn.addEventListener('click', () => {
+        document.body.removeChild(alertOverlay);
+        showCowModal(cow);
+    });
+
+    dismissBtn.addEventListener('click', () => {
+        document.body.removeChild(alertOverlay);
+    });
+
+    // Auto-dismiss after 10 seconds
+    setTimeout(() => {
+        if (document.body.contains(alertOverlay)) {
+            document.body.removeChild(alertOverlay);
+        }
+    }, 10000);
 }
 
 // Initialize when page loads
