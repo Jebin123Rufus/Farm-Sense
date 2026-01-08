@@ -59,6 +59,52 @@ h1 {
     flex-shrink: 0;
 }
 
+.alerts-section {
+    margin-top: 10px;
+}
+
+.alert {
+    padding: 6px 12px;
+    margin: 4px 0;
+    border-radius: 6px;
+    font-size: 0.8em;
+    font-weight: bold;
+    text-align: center;
+}
+
+.alert-danger {
+    background-color: #dc3545;
+    color: white;
+}
+
+.alert-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.alert-info {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.modal-alerts-section {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.modal-alerts-section h3 {
+    color: white;
+    font-size: 1.2em;
+    margin-bottom: 10px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+}
+
+.modal-alerts-section .alert {
+    margin: 5px 0;
+    font-size: 0.9em;
+}
+
 .cow-id {
     font-size: 1.5em;
     font-weight: bold;
