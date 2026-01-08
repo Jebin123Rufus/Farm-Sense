@@ -26,15 +26,53 @@ async function loadCows() {
     }
 }
 
+// Auto-refresh function
+function startAutoRefresh() {
+    // Load data immediately
+    loadCows();
+
+    // Set up periodic refresh every 30 seconds (matching simulation interval)
+    setInterval(loadCows, 30000);
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', startAutoRefresh);
+
 function createCowCard(cow) {
     const card = document.createElement('div');
     card.className = 'cow-card';
 
-    const alertClass = getAlertClass(cow.alert_level);
+    // Determine alert level based on alerts
+    let alertLevel = 'Normal';
+    let alertClass = 'alert-low';
+    if (cow.alerts && cow.alerts.length > 0) {
+        const highestSeverity = cow.alerts.reduce((max, alert) => {
+            const severityOrder = { 'danger': 3, 'warning': 2, 'info': 1, 'success': 0 };
+            return severityOrder[alert.severity] > severityOrder[max] ? alert.severity : max;
+        }, 'success');
+
+        switch(highestSeverity) {
+            case 'danger': alertLevel = 'Critical'; alertClass = 'alert-high'; break;
+            case 'warning': alertLevel = 'Warning'; alertClass = 'alert-medium'; break;
+            case 'info': alertLevel = 'Info'; alertClass = 'alert-low'; break;
+            case 'success': alertLevel = 'Normal'; alertClass = 'alert-low'; break;
+        }
+    }
+
+    // Create alerts HTML
+    let alertsHtml = '';
+    if (cow.alerts && cow.alerts.length > 0) {
+        alertsHtml = '<div class="alerts-section">';
+        cow.alerts.forEach(alert => {
+            alertsHtml += `<div class="alert alert-${alert.severity}">${alert.message}</div>`;
+        });
+        alertsHtml += '</div>';
+    }
 
     card.innerHTML = `
         <div class="card-header">
             <div class="cow-id">Cow ${cow.cow_id || 'N/A'}</div>
+            ${alertsHtml}
         </div>
         <div class="essential-info">
             <div class="info-item">
@@ -43,7 +81,7 @@ function createCowCard(cow) {
             </div>
             <div class="info-item">
                 <div class="info-label">Alert</div>
-                <div class="info-value ${alertClass}">${cow.alert_level || 'N/A'}</div>
+                <div class="info-value ${alertClass}">${alertLevel}</div>
             </div>
             <div class="info-item">
                 <div class="info-label">Milk Yield</div>
@@ -72,6 +110,16 @@ function getAlertClass(alertLevel) {
 }
 
 function showCowModal(cow) {
+    // Create alerts HTML for modal
+    let modalAlertsHtml = '';
+    if (cow.alerts && cow.alerts.length > 0) {
+        modalAlertsHtml = '<div class="modal-alerts-section"><h3>Active Alerts</h3>';
+        cow.alerts.forEach(alert => {
+            modalAlertsHtml += `<div class="alert alert-${alert.severity}">${alert.message}</div>`;
+        });
+        modalAlertsHtml += '</div>';
+    }
+
     const modalOverlay = document.createElement('div');
     modalOverlay.className = 'modal-overlay';
 
@@ -80,6 +128,7 @@ function showCowModal(cow) {
             <button class="close-button">&times;</button>
             <div class="modal-header">
                 <div class="modal-cow-id">Cow ${cow.cow_id || 'N/A'} - Full Details</div>
+                ${modalAlertsHtml}
             </div>
             <div class="details-grid">
                 <div class="detail-item">
@@ -152,8 +201,5 @@ function showCowModal(cow) {
     });
 }
 
-// Load cows data when page loads
-loadCows();
-
-// Refresh data every 30 seconds
-setInterval(loadCows, 30000);
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', startAutoRefresh);
