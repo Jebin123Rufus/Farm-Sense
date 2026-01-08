@@ -14,8 +14,10 @@ body {
     background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
     min-height: 100vh;
     padding: 20px;
-    background-image: url('images/cow\ img1.jpeg');
+    background-image: url('images/cow img1.jpeg');
     background-size: cover;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
 }
 
 .container {
